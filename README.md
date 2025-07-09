@@ -1,0 +1,2 @@
+# vaultdynamic
+vault dynamic secret
