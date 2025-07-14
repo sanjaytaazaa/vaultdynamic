@@ -13,7 +13,6 @@ builder.Configuration.AddJsonFile("/vault/secrets/db-secrets.json", optional: fa
 builder.Services.AddScoped<AppDbContext>(sp =>
 {
     string connectionString = $"Host=hippo-dev-primary-service.postgresql.svc.cluster.local;Port=5432;Database=hippo;Username={builder.Configuration["username"]};Password={builder.Configuration["password"]};";
-
     Console.WriteLine("refreshed conn string..." + connectionString);
     var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
     optionsBuilder.UseNpgsql(connectionString);
@@ -21,7 +20,9 @@ builder.Services.AddScoped<AppDbContext>(sp =>
 });
 
 builder.Services.AddHealthChecks()
-    .AddCheck("live", () => HealthCheckResult.Healthy("Live check passed"), tags: new[] { "live" });
+    .AddCheck("live", () => HealthCheckResult.Healthy("Live check passed"), tags: new[] { "live" })
+    .AddCheck<DynamicNpgSqlHealthCheck>("postgres", tags: new[] { "ready" });
+
 
 builder.Services.AddControllers();
 var app = builder.Build();
