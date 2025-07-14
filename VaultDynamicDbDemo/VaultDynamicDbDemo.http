@@ -1,0 +1,6 @@
+@VaultDynamicDbDemo_HostAddress = http://localhost:5129
+
+GET {{VaultDynamicDbDemo_HostAddress}}/test/
+Accept: application/json
+
+###
