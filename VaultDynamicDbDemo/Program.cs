@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,8 +13,8 @@ builder.Configuration.AddJsonFile("/vault/secrets/db-secrets.json", optional: fa
 
 builder.Services.AddScoped<AppDbContext>(sp =>
 {
-    string connectionString = $"Host=hippo-dev-primary-service.postgresql.svc.cluster.local;Port=5432;Database=hippo;Username={builder.Configuration["username"]};Password={builder.Configuration["password"]};";
-    Console.WriteLine("refreshed conn string..." + connectionString);
+    string connectionString = $"Host=hippo-dev-primary-service.postgresql.svc.cluster.local;Port=5432;Database=hippo;Username={builder.Configuration["db_username"]};Password={builder.Configuration["db_password"]};";
+    Console.WriteLine("DB refreshed conn string..." + connectionString);
     var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
     optionsBuilder.UseNpgsql(connectionString);
     return new AppDbContext(optionsBuilder.Options);
@@ -22,7 +23,33 @@ builder.Services.AddScoped<AppDbContext>(sp =>
 builder.Services.AddHealthChecks()
     .AddCheck("live", () => HealthCheckResult.Healthy("Live check passed"), tags: new[] { "live" })
     .AddCheck<DynamicNpgSqlHealthCheck>("postgres", tags: new[] { "ready" });
+    //.AddCheck<DynamicRabbitMqSqlHealthCheck>("rabbitmq", tags: new[] { "ready" });
 
+builder.Services.AddScoped<HelloPublisher>();
+builder.Services.AddSingleton<RabbitMqConfigService>();
+
+builder.Services.AddMassTransit(x =>
+{
+    x.AddConsumer<HelloMessageConsumer>();
+
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var rabbitConfig = context.GetRequiredService<RabbitMqConfigService>();
+        var connString = rabbitConfig.GetConnectionString();
+        Console.WriteLine("Rabbitmq refreshed conn string..." + connString);
+
+        cfg.Host(new Uri(connString), h =>
+        {
+            h.Username(builder.Configuration["rabbit_username"]);
+            h.Password(builder.Configuration["rabbit_password"]);
+        });
+
+        cfg.ReceiveEndpoint("hello-queue", e =>
+        {
+            e.ConfigureConsumer<HelloMessageConsumer>(context);
+        });
+    });
+});
 
 builder.Services.AddControllers();
 var app = builder.Build();
@@ -63,6 +90,30 @@ app.MapGet("/test", () =>
     return forecast;
 })
 .WithName("GetWeatherForecast");
+
+app.MapGet("/rabbit", async (string message, IPublishEndpoint publishEndpoint, [FromServices] ILogger<Program> logger) =>
+{
+    try
+    {
+        if (message != string.Empty)
+        {
+            await publishEndpoint.Publish(new HelloMessage(message));
+            Console.WriteLine("Published message: " + message);
+            return Results.Ok("Message sent to RabbitMQ");
+        }
+        else
+        {
+            await publishEndpoint.Publish(new HelloMessage(message));
+            Console.WriteLine("Published message: " + message);
+            return Results.Ok("Message published");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred from rabbit.");
+        return Results.Problem("rabbit An unexpected error occurred.");
+    }
+});
 
 app.Run();
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
