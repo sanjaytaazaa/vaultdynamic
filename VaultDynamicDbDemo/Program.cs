@@ -1,4 +1,3 @@
-using MassTransit;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -22,34 +21,11 @@ builder.Services.AddScoped<AppDbContext>(sp =>
 
 builder.Services.AddHealthChecks()
     .AddCheck("live", () => HealthCheckResult.Healthy("Live check passed"), tags: new[] { "live" })
-    .AddCheck<DynamicNpgSqlHealthCheck>("postgres", tags: new[] { "ready" });
-    //.AddCheck<DynamicRabbitMqSqlHealthCheck>("rabbitmq", tags: new[] { "ready" });
+    .AddCheck<DynamicNpgSqlHealthCheck>("postgres", tags: new[] { "ready" })
+    .AddCheck<RabbitMqHealthCheck>("rabbitmq", tags: new[] { "ready" });
 
 builder.Services.AddScoped<HelloPublisher>();
 builder.Services.AddSingleton<RabbitMqConfigService>();
-
-builder.Services.AddMassTransit(x =>
-{
-    x.AddConsumer<HelloMessageConsumer>();
-
-    x.UsingRabbitMq((context, cfg) =>
-    {
-        var rabbitConfig = context.GetRequiredService<RabbitMqConfigService>();
-        var connString = rabbitConfig.GetConnectionString();
-        Console.WriteLine("Rabbitmq refreshed conn string..." + connString);
-
-        cfg.Host(new Uri(connString), h =>
-        {
-            h.Username(builder.Configuration["rabbit_username"]);
-            h.Password(builder.Configuration["rabbit_password"]);
-        });
-
-        cfg.ReceiveEndpoint("hello-queue", e =>
-        {
-            e.ConfigureConsumer<HelloMessageConsumer>(context);
-        });
-    });
-});
 
 builder.Services.AddControllers();
 var app = builder.Build();
@@ -91,21 +67,24 @@ app.MapGet("/test", () =>
 })
 .WithName("GetWeatherForecast");
 
-app.MapGet("/rabbit", async (string message, IPublishEndpoint publishEndpoint, [FromServices] ILogger<Program> logger) =>
+app.MapGet("/rabbit", async (string message, [FromServices] ILogger<Program> logger) =>
 {
     try
     {
+        var configService = new RabbitMqConfigService();
         if (message != string.Empty)
         {
-            await publishEndpoint.Publish(new HelloMessage(message));
+            var publisher = new HelloPublisher(configService);
+            publisher.SendHello("Hello from RabbitMQ.Client" + message);
             Console.WriteLine("Published message: " + message);
-            return Results.Ok("Message sent to RabbitMQ");
+            return Results.Ok("Message published");
         }
         else
         {
-            await publishEndpoint.Publish(new HelloMessage(message));
-            Console.WriteLine("Published message: " + message);
-            return Results.Ok("Message published");
+            var consumer = new HelloConsumer(configService);
+            Task.Run(() => consumer.StartConsuming());
+            Console.WriteLine("consumer message: " + message);
+            return Results.Ok("Message consumed");
         }
     }
     catch (Exception ex)

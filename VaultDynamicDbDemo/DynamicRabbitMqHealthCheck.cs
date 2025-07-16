@@ -1,27 +1,43 @@
 ﻿using Microsoft.Extensions.Diagnostics.HealthChecks;
-using MassTransit;
+using RabbitMQ.Client;
 
 namespace VaultDynamicDbDemo
 {
-    //public class DynamicRabbitMqSqlHealthCheck : IHealthCheck
-    //{
-    //    private readonly IBusHealth _busHealth;
+    public class RabbitMqHealthCheck : IHealthCheck
+    {
+        private readonly RabbitMqConfigService _configService;
 
-    //    public DynamicRabbitMqSqlHealthCheck(IBusHealth busHealth)
-    //    {
-    //        _busHealth = busHealth;
-    //    }
+        public RabbitMqHealthCheck(RabbitMqConfigService configService)
+        {
+            _configService = configService;
+        }
+        public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context,CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var (user, pass, host) = _configService.GetCredentials();
 
-    //    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
-    //    {
-    //        var healthResult = _busHealth.CheckHealth();
+                var factory = new ConnectionFactory
+                {
+                    HostName = host,
+                    UserName = user,
+                    Password = pass,
+                    VirtualHost = "/",
+                    RequestedConnectionTimeout = TimeSpan.FromSeconds(5)
+                };
 
-    //        if (healthResult.Status == HealthStatus.Healthy)
-    //        {
-    //            return Task.FromResult(HealthCheckResult.Healthy("MassTransit bus is healthy"));
-    //        }
+                using var connection = factory.CreateConnection();
+                using var channel = connection.CreateModel();
 
-    //        return Task.FromResult(HealthCheckResult.Unhealthy("MassTransit bus is unhealthy"));
-    //    }
-    //}
+                // Try passive check to see if queue exists (optional)
+                channel.QueueDeclarePassive("hello-queue");
+
+                return Task.FromResult(HealthCheckResult.Healthy("RabbitMQ is reachable"));
+            }
+            catch (Exception ex)
+            {
+                return Task.FromResult(HealthCheckResult.Unhealthy("RabbitMQ unreachable", ex));
+            }
+        }
+    }
 }

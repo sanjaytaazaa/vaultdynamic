@@ -1,21 +1,20 @@
-﻿namespace VaultDynamicDbDemo
+﻿using System.Text.Json;
+
+namespace VaultDynamicDbDemo
 {
     public class RabbitMqConfigService
     {
-        private readonly IConfiguration _config;
-
-        public RabbitMqConfigService(IConfiguration config)
+        private const string SecretFilePath = "/vault/secrets/db-secrets.json";
+        public (string User, string Pass, string Host) GetCredentials()
         {
-            _config = config;
+            var json = File.ReadAllText(SecretFilePath);
+            var secret = JsonSerializer.Deserialize<Cred>(json);
+            return (secret.rabbit_username, secret.rabbit_password, "rabbitmq-shared.rabbitmq-shared.svc.cluster.local");
         }
-
-        public string GetConnectionString()
+        private class Cred
         {
-            var user = _config["rabbit_username"];
-            var pass = _config["rabbit_password"];
-            var host = "rabbitmq-shared.rabbitmq-shared.svc.cluster.local";
-            return $"amqp://{user}:{pass}@{host}/";
+            public string rabbit_username { get; set; }
+            public string rabbit_password { get; set; }
         }
     }
-
 }
