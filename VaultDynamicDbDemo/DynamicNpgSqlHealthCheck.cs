@@ -16,7 +16,7 @@ namespace VaultDynamicDbDemo
             HealthCheckContext context,
             CancellationToken cancellationToken = default)
         {
-            var connectionString = $"Host=hippo-dev-primary-service.postgresql.svc.cluster.local;Port=5432;Database=hippo;Username={_configuration["username"]};Password={_configuration["password"]};";
+            var connectionString = $"Host=hippo-dev-primary-service.postgresql.svc.cluster.local;Port=5432;Database=hippo;Username={_configuration["db_username"]};Password={_configuration["db_password"]};";
 
             try
             {

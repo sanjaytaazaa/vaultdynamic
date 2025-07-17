@@ -12,8 +12,8 @@ builder.Configuration.AddJsonFile("/vault/secrets/db-secrets.json", optional: fa
 
 builder.Services.AddScoped<AppDbContext>(sp =>
 {
-    string connectionString = $"Host=hippo-dev-primary-service.postgresql.svc.cluster.local;Port=5432;Database=hippo;Username={builder.Configuration["username"]};Password={builder.Configuration["password"]};";
-    Console.WriteLine("refreshed conn string..." + connectionString);
+    string connectionString = $"Host=hippo-dev-primary-service.postgresql.svc.cluster.local;Port=5432;Database=hippo;Username={builder.Configuration["db_username"]};Password={builder.Configuration["db_password"]};";
+    Console.WriteLine("DB refreshed conn string..." + connectionString);
     var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
     optionsBuilder.UseNpgsql(connectionString);
     return new AppDbContext(optionsBuilder.Options);
@@ -21,8 +21,11 @@ builder.Services.AddScoped<AppDbContext>(sp =>
 
 builder.Services.AddHealthChecks()
     .AddCheck("live", () => HealthCheckResult.Healthy("Live check passed"), tags: new[] { "live" })
-    .AddCheck<DynamicNpgSqlHealthCheck>("postgres", tags: new[] { "ready" });
+    .AddCheck<DynamicNpgSqlHealthCheck>("postgres", tags: new[] { "ready" })
+    .AddCheck<RabbitMqHealthCheck>("rabbitmq", tags: new[] { "ready" });
 
+builder.Services.AddScoped<HelloPublisher>();
+builder.Services.AddSingleton<RabbitMqConfigService>();
 
 builder.Services.AddControllers();
 var app = builder.Build();
@@ -63,6 +66,33 @@ app.MapGet("/test", () =>
     return forecast;
 })
 .WithName("GetWeatherForecast");
+
+app.MapGet("/rabbit", async (string message, [FromServices] ILogger<Program> logger) =>
+{
+    try
+    {
+        var configService = new RabbitMqConfigService();
+        if (message != string.Empty)
+        {
+            var publisher = new HelloPublisher(configService);
+            publisher.SendHello("Hello from RabbitMQ.Client" + message);
+            Console.WriteLine("Published message: " + message);
+            return Results.Ok("Message published");
+        }
+        else
+        {
+            var consumer = new HelloConsumer(configService);
+            Task.Run(() => consumer.StartConsuming());
+            Console.WriteLine("consumer message: " + message);
+            return Results.Ok("Message consumed");
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred from rabbit.");
+        return Results.Problem("rabbit An unexpected error occurred.");
+    }
+});
 
 app.Run();
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
