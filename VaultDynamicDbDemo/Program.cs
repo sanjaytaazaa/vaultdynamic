@@ -72,11 +72,25 @@ app.MapGet("/rabbit", async (string message, [FromServices] ILogger<Program> log
     try
     {
         var configService = new RabbitMqConfigService();
-        if (message != string.Empty)
+        if (message == "00")
         {
             var publisher = new HelloPublisher(configService);
             publisher.SendHello("Hello from RabbitMQ.Client" + message);
-            Console.WriteLine("Published message: " + message);
+            Console.WriteLine("Single Published message: " + message);
+            return Results.Ok("Message published");
+        }
+        else if(message == "11")
+        {
+            var publisher = new HelloPublisher(configService);
+            publisher.TestConcurrentConnections();
+            Console.WriteLine("TestConcurrentConnections Published message: " + message);
+            return Results.Ok("Message published");
+        }
+        else if (message == "22")
+        {
+            var publisher = new HelloPublisher(configService);
+            publisher.TestMultipleConnections();
+            Console.WriteLine("TestMultipleConnections Published message: " + message);
             return Results.Ok("Message published");
         }
         else

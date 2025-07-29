@@ -15,6 +15,21 @@ namespace VaultDynamicDbDemo
             _configService = configService;
         }
 
+        public void TestConcurrentConnections()
+        {
+            Parallel.For(0, 25, i =>
+            {
+                SendHello($"Hello #{i}");
+            });
+        }
+        public void TestMultipleConnections()
+        {
+            for (int i = 0; i < 25; i++)
+            {
+                SendHello($"Hello #{i}");
+            }
+        }
+
         public void SendHello(string text)
         {
             var (user, pass, host) = _configService.GetCredentials();
