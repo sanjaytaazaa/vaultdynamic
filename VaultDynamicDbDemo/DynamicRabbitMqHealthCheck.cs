@@ -29,7 +29,6 @@ namespace VaultDynamicDbDemo
                 using var connection = factory.CreateConnection();
                 using var channel = connection.CreateModel();
 
-                // Try passive check to see if queue exists (optional)
                 channel.QueueDeclarePassive("hello-queue");
 
                 return Task.FromResult(HealthCheckResult.Healthy("RabbitMQ is reachable"));
